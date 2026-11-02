@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChemLab Odyssey: ภารกิจพิชิตปริศนาปฏิกิริยาเคมี</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Kanit) -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Three.js for 3D/AR Theme background -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* Canvas Background */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .glow-button {
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        .glow-button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
+        }
+
+        /* Tile Flip Animations */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+
+        /* AR Beam Effect */
+        @keyframes pulse-beam {
+            0%, 100% { opacity: 0.3; transform: scale(0.98); }
+            50% { opacity: 0.8; transform: scale(1.02); }
+        }
+        .ar-beam {
+            animation: pulse-beam 3s infinite ease-in-out;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between relative overflow-x-hidden">
+
+    <!-- 3D AR Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Overlay Wrapper -->
+    <div id="app-container" class="relative z-10 w-full min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-6xl mx-auto">
+        
+        <!-- Header HUD -->
+        <header id="game-header" class="glass-panel rounded-2xl p-4 flex flex-wrap justify-between items-center mb-4 hidden">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600/30 p-2 rounded-lg border border-blue-400/30">
+                    <i class="fa-solid fa-vial-circle-check text-2xl text-cyan-400"></i>
+                </div>
+                <div>
+                    <h2 id="stage-title" class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">ด่านที่ 1</h2>
+                    <p id="stage-subtitle" class="text-xs text-slate-300">ความรู้พื้นฐานปฏิกิริยาเคมี</p>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="flex items-center space-x-6 mt-2 sm:mt-0">
+                <div class="text-center">
+                    <span class="text-xs text-slate-400 uppercase tracking-wider block">เวลาคงเหลือ</span>
+                    <span id="timer-display" class="text-2xl font-black text-amber-400 font-mono">00:00</span>
+                </div>
+                <div class="text-center">
+                    <span class="text-xs text-slate-400 uppercase tracking-wider block">คะแนนสะสม</span>
+                    <span id="score-display" class="text-2xl font-black text-emerald-400 font-mono">0</span>
+                </div>
+                <button id="btn-restart-small" onclick="confirmRestart()" class="text-slate-400 hover:text-rose-400 transition-colors p-2" title="เริ่มเกมใหม่">
+                    <i class="fa-solid fa-rotate-right text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Screen Container -->
+        <main id="main-content" class="flex-grow flex items-center justify-center py-4">
+            
+            <!-- SCREEN 1: Game Cover / Title Screen -->
+            <section id="cover-screen" class="w-full text-center flex flex-col items-center justify-center py-8">
+                <div class="glass-panel p-8 md:p-12 rounded-3xl max-w-3xl w-full border border-cyan-500/30 relative overflow-hidden ar-beam">
+                    
+                    <div class="absolute -top-12 -right-12 w-40 h-40 bg-cyan-500/20 rounded-full blur-3xl"></div>
+                    <div class="absolute -bottom-12 -left-12 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl"></div>
+
+                    <!-- Badge -->
+                    <div class="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 text-sm mb-6">
+                        <i class="fa-solid fa-atom animate-spin"></i>
+                        <span>เกมจำลองปฏิกิริยาเคมีเสมือนจริง (AR Interactive)</span>
+                    </div>
+
+                    <!-- Title -->
+                    <h1 class="text-4xl md:text-6xl font-black tracking-tight mb-4 text-white drop-shadow-md">
+                        CHEMLAB <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-blue-500">ODYSSEY</span>
+                    </h1>
+                    <p class="text-lg md:text-xl text-slate-300 font-light mb-8 max-w-xl mx-auto">
+                        ภารกิจพิชิตปริศนาการเกิดปฏิกิริยาเคมี สนุกไปกับ 3 ด่านการเรียนรู้สุดท้าทาย
+                    </p>
+
+                    <!-- Features Cards Preview -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 text-left">
+                        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+                            <div class="text-cyan-400 font-bold mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-table-cells"></i> ด่านที่ 1
+                            </div>
+                            <div class="text-sm text-slate-300 font-semibold">เปิดแผ่นป้ายจับคู่คำศัพท์</div>
+                            <div class="text-xs text-slate-400 mt-1">ทดสอบความจำสัญลักษณ์และนิยาม</div>
+                        </div>
+                        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+                            <div class="text-purple-400 font-bold mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-object-group"></i> ด่านที่ 2
+                            </div>
+                            <div class="text-sm text-slate-300 font-semibold">จับคู่สมการปฏิกิริยา</div>
+                            <div class="text-xs text-slate-400 mt-1">สารตั้งต้น & ผลิตภัณฑ์ในชีวิตประจำวัน</div>
+                        </div>
+                        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+                            <div class="text-emerald-400 font-bold mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-brain"></i> ด่านที่ 3
+                            </div>
+                            <div class="text-sm text-slate-300 font-semibold">ประลองโจทย์เคมี 5 ข้อ</div>
+                            <div class="text-xs text-slate-400 mt-1">คำถาม 4 ตัวเลือก พร้อมสลับโจทย์</div>
+                        </div>
+                    </div>
+
+                    <!-- Action Button -->
+                    <button onclick="startGame()" class="glow-button px-10 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xl font-bold rounded-2xl shadow-lg flex items-center justify-center space-x-3 mx-auto">
+                        <span>เริ่มภารกิจตะลุยด่าน</span>
+                        <i class="fa-solid fa-rocket"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- SCREEN 2: Stage 1 - Tile Memory Game -->
+            <section id="stage1-screen" class="w-full hidden flex-col items-center">
+                <div class="glass-panel p-6 rounded-3xl w-full max-w-4xl border border-cyan-500/20">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-cyan-300">ด่านที่ 1: เปิดแผ่นป้ายจับคู่คำนิยาม</h3>
+                            <p class="text-xs text-slate-400">คลิกเปิดแผ่นป้ายเพื่อจับคู่นิยามและปรากฏการณ์เคมีที่ตรงกัน (ใช้เวลาให้น้อยที่สุด)</p>
+                        </div>
+                        <span class="text-sm bg-cyan-500/20 text-cyan-300 px-3 py-1 rounded-full border border-cyan-400/30">
+                            จับคู่สำเร็จ: <span id="s1-pairs-count">0</span>/6 Pair
+                        </span>
+                    </div>
+
+                    <!-- Grid for Tiles -->
+                    <div id="stage1-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 my-4">
+                        <!-- Tiles injected dynamic via JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- SCREEN 3: Stage 2 - Matching Game -->
+            <section id="stage2-screen" class="w-full hidden flex-col items-center">
+                <div class="glass-panel p-6 rounded-3xl w-full max-w-4xl border border-purple-500/20">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-purple-300">ด่านที่ 2: จับคู่ปฏิกิริยาเคมีในชีวิตประจำวัน</h3>
+                            <p class="text-xs text-slate-400">คลิกเลือกปฏิกิริยาฝั่งซ้าย แล้วจับคู่กับสารตั้งต้น/ผลิตภัณฑ์ทางฝั่งขวาให้ถูกต้อง</p>
+                        </div>
+                        <span class="text-sm bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-400/30">
+                            ความคืบหน้า: <span id="s2-match-count">0</span>/5
+                        </span>
+                    </div>
+
+                    <!-- Matching Columns Container -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 my-4">
+                        <!-- Left Items (Reactions) -->
+                        <div id="s2-left-col" class="space-y-3">
+                            <!-- Injected JS -->
+                        </div>
+                        <!-- Right Items (Reactants / Products) -->
+                        <div id="s2-right-col" class="space-y-3">
+                            <!-- Injected JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SCREEN 4: Stage 3 - Quiz Game -->
+            <section id="stage3-screen" class="w-full hidden flex-col items-center">
+                <div class="glass-panel p-6 md:p-8 rounded-3xl w-full max-w-3xl border border-emerald-500/20">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="text-xl font-bold text-emerald-300">ด่านที่ 3: แบบทดสอบวัดความรู้เคมี</h3>
+                            <p class="text-xs text-slate-400">ตอบคำถาม 4 ตัวเลือก 5 ข้อให้ถูกต้องที่สุด</p>
+                        </div>
+                        <div class="bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded-full border border-emerald-400/30 text-sm font-semibold">
+                            ข้อที่ <span id="quiz-progress-text">1</span>/5
+                        </div>
+                    </div>
+
+                    <!-- Quiz Question Card -->
+                    <div class="bg-slate-900/80 p-6 rounded-2xl border border-slate-700/80 mb-6">
+                        <h4 id="quiz-question-text" class="text-lg md:text-xl font-semibold text-slate-100 leading-relaxed">
+                            <!-- Question dynamic -->
+                        </h4>
+                    </div>
+
+                    <!-- Options Grid -->
+                    <div id="quiz-options-grid" class="grid grid-cols-1 gap-3.5 mb-4">
+                        <!-- Dynamic Buttons injected via JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- SCREEN 5: Final Summary Score -->
+            <section id="summary-screen" class="w-full hidden flex-col items-center">
+                <div class="glass-panel p-8 rounded-3xl w-full max-w-2xl border border-amber-500/30 text-center relative overflow-hidden">
+                    
+                    <div class="w-24 h-24 bg-amber-500/20 rounded-full border-2 border-amber-400 flex items-center justify-center mx-auto mb-4 animate-bounce">
+                        <i class="fa-solid fa-trophy text-4xl text-amber-400"></i>
+                    </div>
+
+                    <h2 class="text-3xl font-black text-white mb-1">สรุปผลการทำภารกิจ!</h2>
+                    <p class="text-slate-300 text-sm mb-6">คุณได้เรียนรู้และพิชิตเรื่องการเกิดปฏิกิริยาเคมีเรียบร้อยแล้ว</p>
+
+                    <!-- Score Breakdown Grid -->
+                    <div class="bg-slate-900/70 p-6 rounded-2xl border border-slate-800 space-y-3 mb-8 text-left">
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                            <span class="text-slate-300"><i class="fa-solid fa-table-cells text-cyan-400 mr-2"></i>ด่านที่ 1 (เปิดแผ่นป้าย)</span>
+                            <span id="score-s1" class="font-bold text-cyan-300 font-mono text-lg">0 คะแนน</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                            <span class="text-slate-300"><i class="fa-solid fa-object-group text-purple-400 mr-2"></i>ด่านที่ 2 (จับคู่ความสัมพันธ์)</span>
+                            <span id="score-s2" class="font-bold text-purple-300 font-mono text-lg">0 คะแนน</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                            <span class="text-slate-300"><i class="fa-solid fa-brain text-emerald-400 mr-2"></i>ด่านที่ 3 (แบบทดสอบ 5 ข้อ)</span>
+                            <span id="score-s3" class="font-bold text-emerald-300 font-mono text-lg">0 คะแนน</span>
+                        </div>
+                        <div class="flex justify-between items-center text-amber-300 font-semibold pt-1">
+                            <span><i class="fa-solid fa-bolt text-amber-400 mr-2"></i>คะแนนโบนัสความเร็ว (Speed Bonus)</span>
+                            <span id="score-bonus" class="font-bold text-amber-400 font-mono text-lg">+0 คะแนน</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Score Display -->
+                    <div class="mb-8">
+                        <span class="text-xs text-slate-400 uppercase tracking-widest block mb-1">คะแนนรวมทั้งหมด</span>
+                        <span id="score-total" class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 font-mono">
+                            0
+                        </span>
+                        <span class="text-slate-400 text-lg"> / 1000 คะแนน</span>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button onclick="startGame()" class="glow-button px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-rotate-right"></i> เล่นใหม่อีกครั้ง (สลับโจทย์)
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="text-center text-xs text-slate-500 py-2 border-t border-slate-800/50">
+            สื่อการเรียนรู้แบบตอบโต้ | เรื่อง การเกิดปฏิกิริยาเคมี (วิทยาศาสตร์มัธยมศึกษา)
+        </footer>
+    </div>
+
+    <!-- Custom Modal Dialog -->
+    <div id="custom-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel p-6 rounded-2xl max-w-sm w-full text-center border border-slate-700">
+            <i id="modal-icon" class="fa-solid fa-circle-info text-4xl text-cyan-400 mb-3"></i>
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-2">แจ้งเตือน</h3>
+            <p id="modal-msg" class="text-sm text-slate-300 mb-6">ข้อความแจ้งเตือน</p>
+            <div id="modal-actions" class="flex justify-center gap-3">
+                <button onclick="closeModal()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-semibold">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Logic Script -->
+    <script>
+        /* ===================================================
+           1. THREE.JS BACKGROUND SIMULATION (AR Lab Effect)
+           =================================================== */
+        let scene, camera, renderer, particles;
+
+        function initThreeJS() {
+            const canvas = document.getElementById('bg-canvas');
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 30;
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Floating Molecules / Atoms Geometry
+            const geometry = new THREE.BufferGeometry();
+            const count = 120;
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+
+            for (let i = 0; i < count * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 80;
+                positions[i + 1] = (Math.random() - 0.5) * 80;
+                positions[i + 2] = (Math.random() - 0.5) * 80;
+
+                // Glowing Cyan/Purple/Yellow chemical colors
+                colors[i] = Math.random() * 0.3 + 0.2; // R
+                colors[i + 1] = Math.random() * 0.6 + 0.4; // G
+                colors[i + 2] = 0.9; // B
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 1.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            animateThree();
+        }
+
+        function animateThree() {
+            requestAnimationFrame(animateThree);
+            if (particles) {
+                particles.rotation.x += 0.001;
+                particles.rotation.y += 0.0015;
+            }
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+
+        /* ===================================================
+           2. GAME DATA (Extracted precisely from sheet)
+           =================================================== */
+        
+        // Stage 1 Data: Concept Match Cards (6 Pairs)
+        const stage1MasterData = [
+            { id: 1, text: "สารตั้งต้น (Reactant)", pairId: 'p1' },
+            { id: 2, text: "สารเดิมก่อนเกิดปฏิกิริยา อาจมี 1 หรือมากกว่า", pairId: 'p1' },
+            
+            { id: 3, text: "ผลิตภัณฑ์ (Product)", pairId: 'p2' },
+            { id: 4, text: "สารใหม่ที่มีสมบัติต่างไปจากสารเดิม", pairId: 'p2' },
+            
+            { id: 5, text: "ปฏิกิริยาดูดความร้อน", pairId: 'p3' },
+            { id: 6, text: "ระบบดูดความร้อนเข้ามา สัมผัสภาชนะจะรู้สึกเย็น", pairId: 'p3' },
+            
+            { id: 7, text: "ปฏิกิริยาคายความร้อน", pairId: 'p4' },
+            { id: 8, text: "ระบบคายความร้อนออกมา สัมผัสภาชนะจะรู้สึกร้อน", pairId: 'p4' },
+
+            { id: 9, text: "กฎทรงมวล", pairId: 'p5' },
+            { id: 10, text: "มวลรวมสารก่อนเกิดปฏิกิริยา = มวลรวมหลังเกิด (ระบบปิด)", pairId: 'p5' },
+
+            { id: 11, text: "สมการเคมี", pairId: 'p6' },
+            { id: 12, text: "เขียนแทนด้วย สารตั้งต้น → ผลิตภัณฑ์", pairId: 'p6' }
+        ];
+
+        // Stage 2 Data: Reaction Matching (5 Sets)
+        const stage2MasterData = [
+            { id: 'r1', name: "การเกิดสนิมของเหล็ก", match: "เหล็ก + น้ำ + แก๊สออกซิเจน" },
+            { id: 'r2', name: "การเผาไหม้แบบสมบูรณ์", match: "สารไฮโดรคาร์บอน + แก๊สออกซิเจน (เพียงพอ)" },
+            { id: 'r3', name: "การเกิดฝนกรด", match: "น้ำฝน + ออกไซด์ของไนโตรเจน/ซัลเฟอร์" },
+            { id: 'r4', name: "การสังเคราะห์ด้วยแสงของพืช", match: "แก๊สคาร์บอนไดออกไซด์ + น้ำ" },
+            { id: 'r5', name: "กรด + เบส", match: "ได้เกลือของโลหะ + น้ำ" }
+        ];
+
+        // Stage 3 Data: Quiz (Multiple Choice Questions)
+        const stage3MasterQuizData = [
+            {
+                q: "ข้อใดกล่าวถึง 'สารตั้งต้น (Reactant)' ได้ถูกต้องตามหลักเคมี?",
+                options: [
+                    "สารใหม่ที่เกิดขึ้นหลังเกิดปฏิกิริยาเคมี",
+                    "สารที่เข้าทำปฏิกิริยา อาจมีเพียงชนิดเดียวหรือตั้งแต่ 2 ชนิดขึ้นไป",
+                    "สารที่เกิดจากการรวมตัวของผลิตภัณฑ์ในระบบปิดเท่านั้น",
+                    "พลังงานความร้อนที่ปลดปล่อยออกมาจากภาชนะ"
+                ],
+                answer: 1
+            },
+            {
+                q: "ข้อใดเป็นลักษณะสำคัญของ 'ปฏิกิริยาดูดความร้อน (Endothermic reaction)'?",
+                options: [
+                    "สารตั้งต้นมีพลังงานสูงกว่าผลิตภัณฑ์",
+                    "เมื่อสัมผัสภาชนะจะรู้สึกร้อนขึ้นอย่างชัดเจน",
+                    "ระบบจะดูดพลังงานความร้อนเข้ามา และเมื่อสัมผัสภาชนะจะรู้สึกเย็น",
+                    "ระบบจะคายพลังงานความร้อนออกสู่สิ่งแวดล้อม"
+                ],
+                answer: 2
+            },
+            {
+                q: "ตาม 'กฎทรงมวล' มวลของสารในภาชนะปิดก่อนและหลังเกิดปฏิกิริยาเคมีจะเป็นอย่างไร?",
+                options: [
+                    "มวลรวมของสารทั้งหมดหลังเกิดปฏิกิริยาจะเพิ่มขึ้นเสมอ",
+                    "มวลรวมของสารทั้งหมดก่อนเกิดปฏิกิริยาจะเท่ากับหลังเกิดปฏิกิริยา",
+                    "มวลของผลิตภัณฑ์จะหายไปตามปริมาณแก๊สที่เกิดขึ้น",
+                    "มวลรวมจะเปลี่ยนแปลงตามอุณหภูมิของห้องปฏิบัติติการ"
+                ],
+                answer: 1
+            },
+            {
+                q: "การเผาไหม้แบบไม่สมบูรณ์ จะได้สารใดเป็นผลิตภัณฑ์เพิ่มเติมจากการเผาไหม้สมบูรณ์?",
+                options: [
+                    "แก๊สคาร์บอนมอนอกไซด์ และ เขม่าควัน",
+                    "แก๊สออกซิเจน และ น้ำเกลือ",
+                    "น้ำฝนที่เป็นกรดซัลฟิวริก",
+                    "น้ำตาลกลูโคส และ แก๊สไนโตรเจน"
+                ],
+                answer: 0
+            },
+            {
+                q: "ผลิตภัณฑ์ที่เกิดขึ้นจาก 'การสังเคราะห์ด้วยแสงของพืช' คือข้อใด?",
+                options: [
+                    "เหล็ก + น้ำ",
+                    "น้ำตาลกลูโคส + แก๊สออกซิเจน",
+                    "เกลือของโลหะ + แก๊สไฮโดรเจน",
+                    "แก๊สคาร์บอนไดออกไซด์ + เขม่าควัน"
+                ],
+                answer: 1
+            },
+            {
+                q: "ปฏิกิริยาระหว่าง 'กรด กับ โลหะ' จะได้ผลิตภัณฑ์ชนิดใดเสมอ?",
+                options: [
+                    "เกลือของโลหะ + แก๊สไฮโดรเจน",
+                    "น้ำตาลกลูโคส + แก๊สออกซิเจน",
+                    "น้ำฝนกรด + เขม่าควัน",
+                    "เกลือของโลหะ + น้ำ"
+                ],
+                answer: 0
+            }
+        ];
+
+        /* ===================================================
+           3. GAME STATE MANAGEMENT
+           =================================================== */
+        let currentStage = 0; // 0: Cover, 1, 2, 3, 4: Summary
+        let timerInterval = null;
+        let stageTimeLeft = 0;
+        let totalScore = 0;
+
+        let scores = {
+            stage1: 0,
+            stage2: 0,
+            stage3: 0,
+            bonus: 0
+        };
+
+        // Helper: Utility Shuffle Array
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        /* Modal Dialog Alert */
+        function showAlert(msg, title = "แจ้งเตือน", icon = "fa-circle-info text-cyan-400") {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-msg').innerText = msg;
+            document.getElementById('modal-icon').className = `fa-solid ${icon} text-4xl mb-3`;
+            document.getElementById('custom-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        function confirmRestart() {
+            if (confirm("คุณต้องการเริ่มเกมใหม่ทั้งหมดใช่หรือไม่?")) {
+                startGame();
+            }
+        }
+
+        /* Timer Control */
+        function startTimer(seconds, onTimeUp) {
+            clearInterval(timerInterval);
+            stageTimeLeft = seconds;
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                stageTimeLeft--;
+                updateTimerDisplay();
+                if (stageTimeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    onTimeUp();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(stageTimeLeft / 60);
+            const secs = stageTimeLeft % 60;
+            document.getElementById('timer-display').innerText = 
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('score-display').innerText = totalScore;
+        }
+
+        /* Screen Switcher */
+        function showScreen(screenId) {
+            ['cover-screen', 'stage1-screen', 'stage2-screen', 'stage3-screen', 'summary-screen'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+                document.getElementById(id).classList.remove('flex');
+            });
+
+            const target = document.getElementById(screenId);
+            target.classList.remove('hidden');
+            target.classList.add('flex');
+
+            if (screenId === 'cover-screen') {
+                document.getElementById('game-header').classList.add('hidden');
+            } else {
+                document.getElementById('game-header').classList.remove('hidden');
+            }
+        }
+
+        /* ===================================================
+           4. GAME FLOW & STAGES LOGIC
+           =================================================== */
+
+        function startGame() {
+            totalScore = 0;
+            scores = { stage1: 0, stage2: 0, stage3: 0, bonus: 0 };
+            updateScoreDisplay();
+            startStage1();
+        }
+
+        /* --- STAGE 1: Memory Tile Flip --- */
+        let s1FlippedCards = [];
+        let s1MatchedCount = 0;
+        let s1LockBoard = false;
+        let stage1CardsData = [];
+
+        function startStage1() {
+            currentStage = 1;
+            showScreen('stage1-screen');
+            document.getElementById('stage-title').innerText = "ด่านที่ 1: เปิดแผ่นป้ายจับคู่";
+            document.getElementById('stage-subtitle').innerText = "จับคู่คำศัพท์และคำนิยามเกี่ยวกับเคมี";
+
+            s1FlippedCards = [];
+            s1MatchedCount = 0;
+            s1LockBoard = false;
+            document.getElementById('s1-pairs-count').innerText = 0;
+
+            // Randomize & Shuffle Cards Data
+            stage1CardsData = shuffle([...stage1MasterData]);
+
+            const grid = document.getElementById('stage1-grid');
+            grid.innerHTML = '';
+
+            stage1CardsData.forEach((item, idx) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'perspective-1000 h-28 sm:h-32 cursor-pointer';
+                cardEl.innerHTML = `
+                    <div id="card-${idx}" data-idx="${idx}" data-pair="${item.pairId}" class="w-full h-full relative transform-style-3d transition-transform duration-500 rounded-xl">
+                        <!-- Front Face (Hidden) -->
+                        <div class="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-cyan-500/40 rounded-xl flex items-center justify-center backface-hidden shadow-md hover:border-cyan-400">
+                            <i class="fa-solid fa-atom text-cyan-400 text-2xl animate-pulse"></i>
+                        </div>
+                        <!-- Back Face (Revealed) -->
+                        <div class="absolute inset-0 bg-slate-800 border-2 border-cyan-400 rounded-xl p-2 flex items-center justify-center text-center rotate-y-180 backface-hidden text-xs sm:text-sm font-semibold text-cyan-100 shadow-lg">
+                            <span>${item.text}</span>
+                        </div>
+                    </div>
+                `;
+                cardEl.addEventListener('click', () => handleTileClick(idx));
+                grid.appendChild(cardEl);
+            });
+
+            // 60 seconds timer for Stage 1
+            startTimer(60, () => {
+                showAlert("หมดเวลาด่านที่ 1 แล้ว! ไปยังด่านถัดไป", "หมดเวลา", "fa-clock text-amber-400");
+                finishStage1();
+            });
+        }
+
+        function handleTileClick(idx) {
+            if (s1LockBoard) return;
+            const cardInner = document.getElementById(`card-${idx}`);
+            if (cardInner.classList.contains('rotate-y-180') || s1FlippedCards.some(c => c.idx === idx)) return;
+
+            // Flip Card
+            cardInner.classList.add('rotate-y-180');
+            s1FlippedCards.push({ idx, pair: cardInner.dataset.pair, el: cardInner });
+
+            if (s1FlippedCards.length === 2) {
+                s1LockBoard = true;
+                const [c1, c2] = s1FlippedCards;
+
+                if (c1.pair === c2.pair) {
+                    // Match found
+                    setTimeout(() => {
+                        c1.el.classList.add('ring-4', 'ring-emerald-400');
+                        c2.el.classList.add('ring-4', 'ring-emerald-400');
+                        s1MatchedCount++;
+                        document.getElementById('s1-pairs-count').innerText = s1MatchedCount;
+                        s1FlippedCards = [];
+                        s1LockBoard = false;
+
+                        if (s1MatchedCount === 6) {
+                            setTimeout(finishStage1, 500);
+                        }
+                    }, 400);
+                } else {
+                    // Not a match -> flip back
+                    setTimeout(() => {
+                        c1.el.classList.remove('rotate-y-180');
+                        c2.el.classList.remove('rotate-y-180');
+                        s1FlippedCards = [];
+                        s1LockBoard = false;
+                    }, 1000);
+                }
+            }
+        }
+
+        function finishStage1() {
+            clearInterval(timerInterval);
+            // Calculate Score: 50 pts per matched pair + time bonus
+            const pairScore = s1MatchedCount * 50;
+            const timeBonus = stageTimeLeft * 2;
+            scores.stage1 = pairScore;
+            scores.bonus += timeBonus;
+            totalScore += (pairScore + timeBonus);
+            updateScoreDisplay();
+
+            showAlert(`ผ่านด่านที่ 1! ได้คะแนนด่าน: ${pairScore} + โบนัสเวลา: ${timeBonus}`, "สำเร็จ!", "fa-circle-check text-emerald-400");
+            setTimeout(startStage2, 1500);
+        }
+
+        /* --- STAGE 2: Reaction Matching Game --- */
+        let s2SelectedLeft = null;
+        let s2MatchedPairs = 0;
+        let s2LeftItems = [];
+        let s2RightItems = [];
+
+        function startStage2() {
+            currentStage = 2;
+            showScreen('stage2-screen');
+            document.getElementById('stage-title').innerText = "ด่านที่ 2: จับคู่ความสัมพันธ์";
+            document.getElementById('stage-subtitle').innerText = "เชื่อมโยงปฏิกิริยาเคมีกับสารตั้งต้น/ผลิตภัณฑ์";
+
+            s2SelectedLeft = null;
+            s2MatchedPairs = 0;
+            document.getElementById('s2-match-count').innerText = 0;
+
+            // Randomize items
+            s2LeftItems = shuffle([...stage2MasterData]);
+            s2RightItems = shuffle(stage2MasterData.map(item => ({ id: item.id, text: item.match })));
+
+            renderStage2();
+
+            // 60 seconds timer for Stage 2
+            startTimer(60, () => {
+                showAlert("หมดเวลาด่านที่ 2 แล้ว! ไปยังด่านถัดไป", "หมดเวลา", "fa-clock text-amber-400");
+                finishStage2();
+            });
+        }
+
+        function renderStage2() {
+            const leftCol = document.getElementById('s2-left-col');
+            const rightCol = document.getElementById('s2-right-col');
+            leftCol.innerHTML = '';
+            rightCol.innerHTML = '';
+
+            s2LeftItems.forEach(item => {
+                const btn = document.createElement('div');
+                btn.id = `s2-left-${item.id}`;
+                btn.className = `p-4 rounded-xl border border-slate-700 bg-slate-800/80 cursor-pointer font-semibold text-purple-200 hover:border-purple-400 transition-all flex items-center justify-between`;
+                btn.innerHTML = `<span><i class="fa-solid fa-flask mr-2 text-purple-400"></i>${item.name}</span><i class="fa-solid fa-chevron-right text-xs text-slate-500"></i>`;
+                btn.addEventListener('click', () => selectS2Left(item.id));
+                leftCol.appendChild(btn);
+            });
+
+            s2RightItems.forEach(item => {
+                const btn = document.createElement('div');
+                btn.id = `s2-right-${item.id}`;
+                btn.className = `p-4 rounded-xl border border-slate-700 bg-slate-800/80 cursor-pointer font-semibold text-cyan-200 hover:border-cyan-400 transition-all flex items-center justify-between`;
+                btn.innerHTML = `<span><i class="fa-solid fa-vial mr-2 text-cyan-400"></i>${item.text}</span><i class="fa-solid fa-link text-xs text-slate-500"></i>`;
+                btn.addEventListener('click', () => selectS2Right(item.id));
+                rightCol.appendChild(btn);
+            });
+        }
+
+        function selectS2Left(id) {
+            // Deselect previous
+            if (s2SelectedLeft) {
+                const prev = document.getElementById(`s2-left-${s2SelectedLeft}`);
+                if (prev) prev.classList.remove('border-purple-400', 'bg-purple-950/60', 'ring-2', 'ring-purple-400');
+            }
+
+            s2SelectedLeft = id;
+            const current = document.getElementById(`s2-left-${id}`);
+            current.classList.add('border-purple-400', 'bg-purple-950/60', 'ring-2', 'ring-purple-400');
+        }
+
+        function selectS2Right(id) {
+            if (!s2SelectedLeft) {
+                showAlert("กรุณาเลือกปฏิกิริยาฝั่งซ้ายมือก่อนครับ", "ข้อแนะนำ", "fa-hand-pointer text-amber-400");
+                return;
+            }
+
+            const leftBtn = document.getElementById(`s2-left-${s2SelectedLeft}`);
+            const rightBtn = document.getElementById(`s2-right-${id}`);
+
+            if (s2SelectedLeft === id) {
+                // Correct match
+                leftBtn.className = "p-4 rounded-xl border-2 border-emerald-500 bg-emerald-950/40 text-emerald-300 font-semibold pointer-events-none flex items-center justify-between";
+                rightBtn.className = "p-4 rounded-xl border-2 border-emerald-500 bg-emerald-950/40 text-emerald-300 font-semibold pointer-events-none flex items-center justify-between";
+                
+                leftBtn.innerHTML = `<span><i class="fa-solid fa-circle-check mr-2 text-emerald-400"></i>${leftBtn.innerText}</span>`;
+                rightBtn.innerHTML = `<span><i class="fa-solid fa-circle-check mr-2 text-emerald-400"></i>${rightBtn.innerText}</span>`;
+
+                s2MatchedPairs++;
+                document.getElementById('s2-match-count').innerText = s2MatchedPairs;
+                s2SelectedLeft = null;
+
+                if (s2MatchedPairs === 5) {
+                    setTimeout(finishStage2, 500);
+                }
+            } else {
+                // Wrong match
+                rightBtn.classList.add('border-rose-500', 'bg-rose-950/40');
+                setTimeout(() => {
+                    rightBtn.classList.remove('border-rose-500', 'bg-rose-950/40');
+                }, 600);
+            }
+        }
+
+        function finishStage2() {
+            clearInterval(timerInterval);
+            const matchScore = s2MatchedPairs * 60;
+            const timeBonus = stageTimeLeft * 2;
+            scores.stage2 = matchScore;
+            scores.bonus += timeBonus;
+            totalScore += (matchScore + timeBonus);
+            updateScoreDisplay();
+
+            showAlert(`ผ่านด่านที่ 2! ได้คะแนนด่าน: ${matchScore} + โบนัสเวลา: ${timeBonus}`, "สำเร็จ!", "fa-circle-check text-emerald-400");
+            setTimeout(startStage3, 1500);
+        }
+
+        /* --- STAGE 3: Multiple Choice Quiz --- */
+        let s3QuizList = [];
+        let s3CurrentIdx = 0;
+        let s3CorrectAnswers = 0;
+
+        function startStage3() {
+            currentStage = 3;
+            showScreen('stage3-screen');
+            document.getElementById('stage-title').innerText = "ด่านที่ 3: แบบทดสอบวัดความรู้เคมี";
+            document.getElementById('stage-subtitle').innerText = "เลือกคำตอบที่ถูกต้องที่สุด 5 ข้อ";
+
+            // Select 5 randomized questions from master
+            s3QuizList = shuffle([...stage3MasterQuizData]).slice(0, 5).map(q => {
+                // Also shuffle choices while keeping track of correct choice text
+                const correctText = q.options[q.answer];
+                const shuffledOpts = shuffle([...q.options]);
+                const newAnsIdx = shuffledOpts.indexOf(correctText);
+                return {
+                    q: q.q,
+                    options: shuffledOpts,
+                    answer: newAnsIdx
+                };
+            });
+
+            s3CurrentIdx = 0;
+            s3CorrectAnswers = 0;
+            renderQuizQuestion();
+
+            // 75 seconds timer for 5 Quiz questions
+            startTimer(75, () => {
+                showAlert("หมดเวลาด่านที่ 3 แล้ว! คำนวณผลการเล่นเกม...", "หมดเวลา", "fa-clock text-amber-400");
+                finishStage3();
+            });
+        }
+
+        function renderQuizQuestion() {
+            if (s3CurrentIdx >= 5) {
+                finishStage3();
+                return;
+            }
+
+            document.getElementById('quiz-progress-text').innerText = s3CurrentIdx + 1;
+            const currentQ = s3QuizList[s3CurrentIdx];
+            document.getElementById('quiz-question-text').innerText = `${s3CurrentIdx + 1}. ${currentQ.q}`;
+
+            const grid = document.getElementById('quiz-options-grid');
+            grid.innerHTML = '';
+
+            const prefixes = ['ก', 'ข', 'ค', 'ง'];
+
+            currentQ.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left p-4 rounded-xl border border-slate-700 bg-slate-800/90 hover:bg-slate-700/80 hover:border-emerald-400 transition-all font-medium text-slate-200 flex items-center space-x-3 group`;
+                btn.innerHTML = `
+                    <span class="w-8 h-8 rounded-lg bg-slate-700 group-hover:bg-emerald-500 group-hover:text-slate-950 text-emerald-400 font-bold flex items-center justify-center flex-shrink-0 transition-colors">
+                        ${prefixes[idx]}
+                    </span>
+                    <span class="text-sm md:text-base">${opt}</span>
+                `;
+                btn.addEventListener('click', () => handleAnswerSelect(idx));
+                grid.appendChild(btn);
+            });
+        }
+
+        function handleAnswerSelect(selectedIdx) {
+            const currentQ = s3QuizList[s3CurrentIdx];
+            const isCorrect = (selectedIdx === currentQ.answer);
+
+            if (isCorrect) {
+                s3CorrectAnswers++;
+            }
+
+            s3CurrentIdx++;
+            renderQuizQuestion();
+        }
+
+        function finishStage3() {
+            clearInterval(timerInterval);
+            const quizScore = s3CorrectAnswers * 80; // 5 * 80 = max 400
+            const timeBonus = stageTimeLeft * 2;
+            scores.stage3 = quizScore;
+            scores.bonus += timeBonus;
+            totalScore += (quizScore + timeBonus);
+            updateScoreDisplay();
+
+            showSummaryScreen();
+        }
+
+        /* --- SUMMARY SCREEN --- */
+        function showSummaryScreen() {
+            currentStage = 4;
+            showScreen('summary-screen');
+            document.getElementById('game-header').classList.add('hidden');
+
+            document.getElementById('score-s1').innerText = `${scores.stage1} คะแนน`;
+            document.getElementById('score-s2').innerText = `${scores.stage2} คะแนน`;
+            document.getElementById('score-s3').innerText = `${scores.stage3} คะแนน`;
+            document.getElementById('score-bonus').innerText = `+${scores.bonus} คะแนน`;
+            document.getElementById('score-total').innerText = totalScore;
+        }
+
+        // Initialize 3D simulation on page load
+        window.onload = function() {
+            initThreeJS();
+        };
+    </script>
+</body>
+</html>
